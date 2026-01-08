@@ -1,0 +1,56 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.venv/
+venv/
+ENV/
+
+# VS Code
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Databases
+*.db
+*.sqlite3
+*.sqlite3-journal
+
+# Project Specific
+chromedriver.exe
+/driver/glop/
+/driver/debug_source.html
+/driver/debug_modal_iframe_0.html
+/server/instance/
+/server/.webassets-cache
+/server/logs/
+downloads/
+*.xlsx
+*.xls
+*.csv
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IDEs
+.idea/
+*.iml
+.spyderproject
+.spyproject
+.ropeproject
+
+# Testing
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/

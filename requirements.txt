@@ -1,0 +1,14 @@
+# Integrated Project Requirements
+# Driver dependencies
+selenium
+pandas
+openpyxl
+xlrd
+xlwt
+lxml
+
+# Server dependencies
+Flask
+plotly
+SQLAlchemy
+requests
