@@ -1,6 +1,7 @@
 import time
 import os
 import glob
+import datetime
 import pandas as pd
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -17,6 +18,31 @@ DOWNLOAD_DIR = os.path.join(os.path.expanduser("~"), "Downloads")
 
 # Chrome WebDriver 경로 (driver 폴더 내의 chromedriver.exe 사용)
 CHROME_DRIVER_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'chromedriver.exe')
+
+def get_weekname(date):
+    """
+    특정 datetime 날짜를 입력받아서 해당 날짜에 해당하는 isocalendar 기준의 week name을 text로 생성하는 함수
+    """
+    if pd.isna(date):
+        return None
+    firstdayofweek = date - datetime.timedelta(days = date.isocalendar()[2] - 1)
+    return f"{firstdayofweek.year}-{firstdayofweek.month:02d}-{firstdayofweek.day:02d}(W{date.isocalendar()[1]:02d})"
+
+def get_month_from_date(date):
+    """
+    datetime 날짜를 입력받아서 해당 날짜에 해당하는 월(month) 값을 돌려주는 함수
+    """
+    if pd.isna(date):
+        return None
+    month_list = []
+    for i in range(7):
+        month_list.append((date - datetime.timedelta(days=date.isocalendar()[2]-1-i)).month)
+    month_list = pd.Series(month_list)
+    max_value = month_list.value_counts().max()
+    for i in month_list.value_counts().index:
+        if month_list.value_counts().loc[i] == max_value:
+            return i
+    return None
 
 def wait_for_new_file(download_dir, initial_files, timeout=60):
     """
@@ -76,9 +102,58 @@ def save_to_db(file_path, site_name):
             # 'From Site' 컬럼 추가
             df['From Site'] = site_name
             
-            # DB 연결
+            # --- [추가] 날짜 변환 및 데이터 보강 로직 ---
+            
+            # 1. RSD 기준 Week 컬럼 업데이트
+            if 'RSD' in df.columns:
+                df['RSD'] = pd.to_datetime(df['RSD'], errors='coerce')
+                df['Week'] = df['RSD'].apply(get_weekname)
+            
+            # 2. Ship Date 기준 Week Name 및 Month 생성
+            if 'Ship Date' in df.columns:
+                df['Ship Date'] = pd.to_datetime(df['Ship Date'], errors='coerce')
+                df['Week Name'] = df['Ship Date'].apply(get_weekname)
+                
+                # Month 생성 (yyyy-mm 형식)
+                def calculate_month(week_name):
+                    if not week_name: return None
+                    try:
+                        dt = datetime.date.fromisoformat(week_name[:10])
+                        iso_year = dt.isocalendar().year
+                        month = get_month_from_date(dt)
+                        return f"{iso_year}-{month:02d}"
+                    except:
+                        return None
+                
+                df['Month'] = df['Week Name'].apply(calculate_month)
+
+            # 3. Site Mapping (Region, Country) 추가 및 검증
             conn = sqlite3.connect(db_path)
             try:
+                mapping_df = pd.read_sql("SELECT * FROM site_mapping", conn)
+                
+                if 'Ship To' in df.columns:
+                    # 매핑되지 않는 Ship To 확인
+                    excel_ship_tos = set(df['Ship To'].dropna().unique())
+                    mapped_tos = set(mapping_df['to_site'].unique())
+                    missing_tos = excel_ship_tos - mapped_tos
+                    
+                    if missing_tos:
+                        print(f"\n[오류] 다음 Ship To에 대한 Region/Country 정보가 site_mapping 테이블에 없습니다: {missing_tos}")
+                        print("site_mapping 테이블에 정보를 추가한 후 다시 시도해주세요. 업데이트를 중단합니다.")
+                        return
+                    
+                    # Join 수행
+                    df = df.merge(mapping_df[['to_site', 'region', 'country']], 
+                                 left_on='Ship To', right_on='to_site', how='left')
+                    
+                    # 컬럼명 정리 (필요시)
+                    df = df.rename(columns={'region': 'Region', 'country': 'Country'})
+                    if 'to_site' in df.columns:
+                        df = df.drop(columns=['to_site'])
+
+                # --- [기존 로직 계속] ---
+                
                 cursor = conn.cursor()
                 # 2. 테이블 존재 여부 확인 및 컬럼 동기화
                 cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='shipment_data'")
@@ -87,7 +162,7 @@ def save_to_db(file_path, site_name):
                 if table_exists:
                     # 기존 컬럼 확인
                     cursor.execute("PRAGMA table_info(shipment_data)")
-                    existing_cols = [info[1] for info in table_exists and cursor.fetchall()]
+                    existing_cols = [info[1] for info in cursor.fetchall()]
                     
                     # 새 컬럼이 있으면 추가 (Schema Evolution)
                     for col in df.columns:
@@ -103,7 +178,7 @@ def save_to_db(file_path, site_name):
                         po_list = df['PO No.'].dropna().unique().tolist()
                         
                         if po_list:
-                            # 해당 업체(From Site)이면서 이번 엑셀에 포함된 PO들만 삭제 (분할 선적 처리 및 과거 데이터 보존)
+                            # 해당 업체(From Site)이면서 이번 엑셀에 포함된 PO들만 삭제
                             placeholders = ', '.join(['?'] * len(po_list))
                             query = f"DELETE FROM shipment_data WHERE `From Site` = ? AND `PO No.` IN ({placeholders})"
                             cursor.execute(query, [site_name] + po_list)
