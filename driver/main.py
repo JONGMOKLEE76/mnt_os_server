@@ -101,6 +101,36 @@ def save_to_db(file_path, site_name):
             
             # 'From Site' 컬럼 추가
             df['From Site'] = site_name
+
+            # --- [추가] 모델 필터링 로직 ---
+            try:
+                # DB에서 os_models 조회
+                with sqlite3.connect(db_path) as tmp_conn:
+                    os_models_df = pd.read_sql("SELECT Series FROM os_models", tmp_conn)
+                
+                valid_series = set(os_models_df['Series'].dropna().unique())
+
+                if 'Model' in df.columns:
+                    # 모델명에서 Series 추출 (예: 27GQ50F-B.AUS -> 27GQ50F)
+                    # 사용자 요청 로직: x.split('-')[0].split('.')[0]
+                    temp_series = df['Model'].astype(str).apply(lambda x: x.split('-')[0].split('.')[0])
+
+                    # 제외될 모델 식별
+                    excluded_mask = ~temp_series.isin(valid_series)
+                    excluded_models = df.loc[excluded_mask, 'Model'].unique()
+
+                    if len(excluded_models) > 0:
+                        print(f"\n[알림] 다음 {len(excluded_models)}개 모델은 os_models에 없어 제외되었습니다:")
+                        for m in excluded_models:
+                            print(f"- {m}")
+
+                    # 필터링 적용
+                    original_count = len(df)
+                    df = df[~excluded_mask].copy()
+                    print(f"모델 필터링 완료: {original_count} -> {len(df)} 행")
+
+            except Exception as e:
+                print(f"모델 필터링 중 오류 발생: {e}")
             
             # --- [추가] 날짜 변환 및 데이터 보강 로직 ---
             
