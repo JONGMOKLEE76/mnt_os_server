@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ORCA - {% block title %}{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    {% block head %}{% endblock %}
+</head>
+
+<body>
+    <div class="bg-animation"></div>
+
+    <div class="app-wrapper">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="brand">
+                    <svg class="navbar-logo" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <ellipse cx="50" cy="50" rx="40" ry="25" fill="#00D9FF" />
+                        <ellipse cx="35" cy="45" rx="8" ry="12" fill="#0A1628" />
+                        <circle cx="25" cy="50" r="3" fill="white" />
+                        <path d="M75 35 Q90 25 85 50 Q90 75 75 65 Q80 50 75 35" fill="#00D9FF" />
+                    </svg>
+                    <span class="brand-name">ORCA</span>
+                </div>
+                <button id="sidebar-toggle" class="sidebar-toggle">
+                    <i class="fas fa-bars"></i>
+                </button>
+            </div>
+
+            <nav class="sidebar-nav">
+                <a href="{{ url_for('dashboard') }}"
+                    class="nav-item {% if request.endpoint == 'dashboard' %}active{% endif %}"
+                    title="Outsourcing Window">
+                    <i class="fas fa-th-large"></i>
+                    <span>Outsourcing Window</span>
+                </a>
+                <a href="{{ url_for('glop_driver') }}"
+                    class="nav-item {% if request.endpoint == 'glop_driver' %}active{% endif %}" title="GLOP Driver">
+                    <i class="fas fa-robot"></i>
+                    <span>GLOP Driver</span>
+                </a>
+                <a href="{{ url_for('glop_report') }}"
+                    class="nav-item {% if request.endpoint == 'glop_report' %}active{% endif %}" title="GLOP Report">
+                    <i class="fas fa-chart-line"></i>
+                    <span>GLOP Report</span>
+                </a>
+                <a href="{{ url_for('forecast') }}"
+                    class="nav-item {% if request.endpoint == 'forecast' %}active{% endif %}" title="Forecast">
+                    <i class="fas fa-crystal-ball"></i>
+                    <span>Forecast</span>
+                </a>
+                <a href="{{ url_for('sp_visualization') }}"
+                    class="nav-item {% if request.endpoint == 'sp_visualization' %}active{% endif %}"
+                    title="SP Visualization">
+                    <i class="fas fa-chart-bar"></i>
+                    <span>SP Visualization</span>
+                </a>
+                <a href="{{ url_for('container_simulation') }}"
+                    class="nav-item {% if request.endpoint == 'container_simulation' %}active{% endif %}"
+                    title="Container Simulation">
+                    <i class="fas fa-ship"></i>
+                    <span>Container Simulation</span>
+                </a>
+                <a href="{{ url_for('issues') }}"
+                    class="nav-item {% if request.endpoint == 'issues' %}active{% endif %}" title="업무 이슈 게시판">
+                    <i class="fas fa-clipboard-list"></i>
+                    <span>업무 이슈 게시판</span>
+                </a>
+                <a href="{{ url_for('mypage') }}"
+                    class="nav-item {% if request.endpoint == 'mypage' %}active{% endif %}" title="My Page">
+                    <i class="fas fa-user-circle"></i>
+                    <span>My Page</span>
+                </a>
+                <a href="{{ url_for('master_data') }}"
+                    class="nav-item {% if request.endpoint == 'master_data' %}active{% endif %}" title="Master Data">
+                    <i class="fas fa-database"></i>
+                    <span>Master Data</span>
+                </a>
+                {% if current_user.is_admin %}
+                <a href="{{ url_for('admin') }}" class="nav-item {% if request.endpoint == 'admin' %}active{% endif %}"
+                    title="관리자 페이지">
+                    <i class="fas fa-user-shield"></i>
+                    <span>관리자 페이지</span>
+                </a>
+                {% endif %}
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="user-profile">
+                    <div class="user-avatar">
+                        <i class="fas fa-user"></i>
+                    </div>
+                    <div class="user-details">
+                        <span class="user-name">{{ current_user.userid }}</span>
+                        <span class="user-role">{% if current_user.is_admin %}Admin{% else %}User{% endif %}</span>
+                    </div>
+                </div>
+                <a href="{{ url_for('logout') }}" class="logout-btn" title="로그아웃">
+                    <i class="fas fa-sign-out-alt"></i>
+                </a>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="content-header">
+                <h1 class="page-title">{% block page_title %}{% endblock %}</h1>
+                <div class="header-actions">
+                    {% block header_actions %}{% endblock %}
+                </div>
+            </header>
+            <div class="content-body">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+                {% endif %}
+                {% endwith %}
+
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Sidebar Toggle Logic
+        const sidebar = document.getElementById('sidebar');
+        const toggleBtn = document.getElementById('sidebar-toggle');
+
+        toggleBtn.addEventListener('click', () => {
+            sidebar.classList.toggle('collapsed');
+            localStorage.setItem('sidebar-collapsed', sidebar.classList.contains('collapsed'));
+        });
+
+        // Restore sidebar state
+        if (localStorage.getItem('sidebar-collapsed') === 'true') {
+            sidebar.classList.add('collapsed');
+        }
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+
+</html>

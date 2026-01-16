@@ -1,77 +1,41 @@
-<!DOCTYPE html>
-<html lang="ko">
+{% extends "layout.html" %}
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ORCA - Admin</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-</head>
+{% block title %}Admin Panel{% endblock %}
 
-<body>
-    <div class="bg-animation"></div>
+{% block page_title %}👥 관리자 페이지{% endblock %}
 
-    <!-- Navigation -->
-    <nav class="navbar">
-        <div class="navbar-brand">
-            <svg class="navbar-logo" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <ellipse cx="50" cy="50" rx="40" ry="25" fill="#00D9FF" />
-                <ellipse cx="35" cy="45" rx="8" ry="12" fill="#0A1628" />
-                <circle cx="25" cy="50" r="3" fill="white" />
-                <path d="M75 35 Q90 25 85 50 Q90 75 75 65 Q80 50 75 35" fill="#00D9FF" />
-            </svg>
-            <span class="navbar-title">ORCA</span>
-        </div>
-        <div class="navbar-menu">
-            <a href="{{ url_for('dashboard') }}" class="nav-link">GLOP Driver</a>
-            <a href="{{ url_for('admin') }}" class="nav-link active">관리자</a>
-            <div class="user-info">
-                <span>{{ current_user.userid }}</span>
-                <a href="{{ url_for('logout') }}" class="nav-link">로그아웃</a>
-            </div>
-        </div>
-    </nav>
+{% block content %}
+<div class="dashboard-container">
+    <div class="glass-card">
+        <h2 style="margin-bottom: 25px; color: var(--accent-teal);">사용자 관리</h2>
 
-    <!-- Admin Content -->
-    <div class="dashboard-container">
-        <div class="glass-card">
-            <h2 style="margin-bottom: 25px; color: var(--accent-teal);">👥 회원 관리</h2>
-
-            <!-- Flash Messages -->
-            {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-            {% for category, message in messages %}
-            <div class="alert alert-{{ category }}">{{ message }}</div>
-            {% endfor %}
-            {% endif %}
-            {% endwith %}
-
+        <div style="overflow-x: auto;">
             <table class="admin-table">
                 <thead>
                     <tr>
-                        <th>ID</th>
                         <th>사용자 ID</th>
                         <th>이메일</th>
                         <th>팀</th>
                         <th>회사</th>
                         <th>상태</th>
                         <th>가입일</th>
-                        <th>작업</th>
+                        <th>액션</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for user in users %}
                     <tr>
-                        <td>{{ user.id }}</td>
-                        <td>{{ user.userid }}</td>
+                        <td style="font-weight: 600;">{{ user.userid }}</td>
                         <td>{{ user.email }}</td>
                         <td>{{ user.team }}</td>
                         <td>{{ user.company }}</td>
                         <td>
-                            <span class="status-badge status-{{ user.status }}">{{ user.status }}</span>
+                            <span class="status-badge status-{{ user.status }}">
+                                {{ '승인됨' if user.status == 'active' else '대기 중' if user.status == 'pending' else '거절됨'
+                                }}
+                            </span>
                         </td>
-                        <td>{{ user.created_at.strftime('%Y-%m-%d') if user.created_at else '-' }}</td>
+                        <td>{{ user.created_at.strftime('%Y-%m-%d') }}</td>
                         <td>
                             {% if user.status == 'pending' %}
                             <form action="{{ url_for('approve_user', user_id=user.id) }}" method="POST"
@@ -80,17 +44,12 @@
                             </form>
                             <form action="{{ url_for('reject_user', user_id=user.id) }}" method="POST"
                                 style="display: inline;">
-                                <button type="submit" class="action-btn reject">거부</button>
+                                <button type="submit" class="action-btn reject">거절</button>
                             </form>
-                            {% elif user.status == 'active' %}
+                            {% elif user.status == 'active' and not user.is_admin %}
                             <form action="{{ url_for('reject_user', user_id=user.id) }}" method="POST"
                                 style="display: inline;">
                                 <button type="submit" class="action-btn reject">비활성화</button>
-                            </form>
-                            {% else %}
-                            <form action="{{ url_for('approve_user', user_id=user.id) }}" method="POST"
-                                style="display: inline;">
-                                <button type="submit" class="action-btn approve">활성화</button>
                             </form>
                             {% endif %}
                         </td>
@@ -100,6 +59,5 @@
             </table>
         </div>
     </div>
-</body>
-
-</html>
+</div>
+{% endblock %}

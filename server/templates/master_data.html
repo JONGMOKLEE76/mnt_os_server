@@ -1,0 +1,65 @@
+{% extends "layout.html" %}
+
+{% block title %}Master Data{% endblock %}
+
+{% block page_title %}🗂️ Master Data Management{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <div class="glass-card">
+        <div class="master-data-header">
+            <div class="table-selector">
+                <label for="table-select">Select Table:</label>
+                <select id="table-select" class="form-input"
+                    style="width: auto; display: inline-block; margin-left: 10px;">
+                    <option value="monitor_stuffing">Monitor Stuffing</option>
+                    <option value="site_mapping">Site Mapping</option>
+                    <option value="os_models">OS Models</option>
+                </select>
+            </div>
+            <button id="add-btn" class="btn btn-primary" style="width: auto; padding: 10px 20px;">
+                <i class="fas fa-plus"></i> Add New Data
+            </button>
+        </div>
+
+        <div class="table-container" style="margin-top: 20px; overflow-x: auto;">
+            <table id="master-table" class="admin-table">
+                <thead id="table-head">
+                    <!-- Dynamic Headers -->
+                </thead>
+                <tbody id="table-body">
+                    <!-- Dynamic Content -->
+                </tbody>
+            </table>
+        </div>
+
+        <div class="pagination" id="pagination">
+            <!-- Dynamic Pagination -->
+        </div>
+    </div>
+</div>
+
+<!-- Modal for Add/Edit -->
+<div id="master-modal" class="modal">
+    <div class="modal-content glass-card">
+        <div class="modal-header">
+            <h2 id="modal-title">Add New Data</h2>
+            <button class="close-modal">&times;</button>
+        </div>
+        <form id="master-form">
+            <div id="form-fields">
+                <!-- Dynamic Form Fields -->
+            </div>
+            <div class="modal-footer" style="margin-top: 20px; text-align: right;">
+                <button type="button" class="btn btn-secondary close-modal"
+                    style="width: auto; margin-right: 10px;">Cancel</button>
+                <button type="submit" class="btn btn-primary" style="width: auto;">Save Changes</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/master_data.js') }}"></script>
+{% endblock %}

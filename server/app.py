@@ -2,13 +2,14 @@ from flask import Flask, request, jsonify, render_template, redirect, url_for, f
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 import pandas as pd
 from database import init_db, upsert_dataframe, db_session, engine
-from models import ShipmentPlan, User, LoginHistory
+from models import ShipmentPlan, User, LoginHistory, MonitorStuffing, SiteMapping, OSModel
 import logging
 import socket
 import json
 import queue
 import threading
 from datetime import datetime
+from sqlalchemy import inspect
 
 app = Flask(__name__)
 app.secret_key = 'orca-secret-key-2026'  # Change in production
@@ -135,10 +136,54 @@ def logout():
     flash('로그아웃되었습니다.', 'success')
     return redirect(url_for('login_page'))
 
+# --- Phase 2 Menus ---
+
 @app.route('/dashboard')
 @login_required
 def dashboard():
+    """Outsourcing Window (Main Dashboard)"""
     return render_template('dashboard.html')
+
+@app.route('/glop-driver')
+@login_required
+def glop_driver():
+    """GLOP Driver Interface"""
+    return render_template('glop_driver.html')
+
+@app.route('/glop-report')
+@login_required
+def glop_report():
+    return render_template('placeholder.html', title='GLOP Report')
+
+@app.route('/forecast')
+@login_required
+def forecast():
+    return render_template('placeholder.html', title='Forecast')
+
+@app.route('/sp-visualization')
+@login_required
+def sp_visualization():
+    return render_template('placeholder.html', title='SP Visualization')
+
+@app.route('/container-simulation')
+@login_required
+def container_simulation():
+    return render_template('placeholder.html', title='Container Simulation')
+
+@app.route('/issues')
+@login_required
+def issues():
+    return render_template('placeholder.html', title='업무 이슈 게시판')
+
+@app.route('/mypage')
+@login_required
+def mypage():
+    return render_template('placeholder.html', title='My Page')
+
+@app.route('/master-data')
+@login_required
+def master_data():
+    return render_template('master_data.html')
 
 @app.route('/admin')
 @login_required
@@ -149,6 +194,106 @@ def admin():
     
     users = db_session.query(User).all()
     return render_template('admin.html', users=users)
+
+# ==================== MASTER DATA API ====================
+
+MODEL_MAP = {
+    'monitor_stuffing': MonitorStuffing,
+    'site_mapping': SiteMapping,
+    'os_models': OSModel
+}
+
+@app.route('/api/master-data/<table_name>', methods=['GET'])
+@login_required
+def get_master_data(table_name):
+    model = MODEL_MAP.get(table_name)
+    if not model:
+        return jsonify({"error": "Invalid table name"}), 400
+    
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    
+    query = db_session.query(model)
+    total = query.count()
+    items = query.offset((page - 1) * per_page).limit(per_page).all()
+    
+    # Convert to dict
+    data = []
+    for item in items:
+        item_dict = {c.key: getattr(item, c.key) for c in inspect(model).mapper.column_attrs}
+        data.append(item_dict)
+        
+    return jsonify({
+        "items": data,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": (total + per_page - 1) // per_page,
+        "columns": [c.key for c in inspect(model).mapper.column_attrs]
+    })
+
+@app.route('/api/master-data/<table_name>', methods=['POST'])
+@login_required
+def create_master_data(table_name):
+    model = MODEL_MAP.get(table_name)
+    if not model:
+        return jsonify({"error": "Invalid table name"}), 400
+    
+    data = request.get_json()
+    try:
+        new_item = model(**data)
+        db_session.add(new_item)
+        db_session.commit()
+        return jsonify({"message": "Created successfully"}), 201
+    except Exception as e:
+        db_session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/master-data/<table_name>/<path:pk_value>', methods=['PUT'])
+@login_required
+def update_master_data(table_name, pk_value):
+    model = MODEL_MAP.get(table_name)
+    if not model:
+        return jsonify({"error": "Invalid table name"}), 400
+    
+    # Get PK attribute name
+    pk_column = inspect(model).primary_key[0].key
+    item = db_session.query(model).filter(getattr(model, pk_column) == pk_value).first()
+    
+    if not item:
+        return jsonify({"error": "Item not found"}), 404
+    
+    data = request.get_json()
+    try:
+        for key, value in data.items():
+            if hasattr(item, key) and key != pk_column:
+                setattr(item, key, value)
+        db_session.commit()
+        return jsonify({"message": "Updated successfully"}), 200
+    except Exception as e:
+        db_session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/master-data/<table_name>/<path:pk_value>', methods=['DELETE'])
+@login_required
+def delete_master_data(table_name, pk_value):
+    model = MODEL_MAP.get(table_name)
+    if not model:
+        return jsonify({"error": "Invalid table name"}), 400
+    
+    pk_column = inspect(model).primary_key[0].key
+    item = db_session.query(model).filter(getattr(model, pk_column) == pk_value).first()
+    
+    if not item:
+        return jsonify({"error": "Item not found"}), 404
+    
+    try:
+        db_session.delete(item)
+        db_session.commit()
+        return jsonify({"message": "Deleted successfully"}), 200
+    except Exception as e:
+        db_session.rollback()
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/admin/approve/<int:user_id>', methods=['POST'])
 @login_required

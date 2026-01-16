@@ -1,0 +1,51 @@
+{% extends "layout.html" %}
+
+{% block title %}GLOP Driver{% endblock %}
+
+{% block page_title %}🐋 GLOP Driver{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <div class="glass-card driver-panel">
+        <h2 style="margin-bottom: 25px; color: var(--accent-teal);">드라이버 제어</h2>
+
+        <!-- Driver Controls -->
+        <div class="driver-controls">
+            <div class="control-group">
+                <label>Product Category</label>
+                <select id="product-category">
+                    <option value="monitor">Monitor</option>
+                    <option value="pc">PC</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label>Supplier Category</label>
+                <select id="supplier-category">
+                    <option value="LGEKR">LGEKR</option>
+                    <option value="LGECH">LGECH</option>
+                </select>
+            </div>
+            <div class="control-group" style="display: flex; align-items: flex-end;">
+                <button id="drive-btn" class="btn btn-primary" style="width: 100%;">
+                    🚀 Drive GLOP
+                </button>
+            </div>
+        </div>
+
+        <!-- Status Indicator -->
+        <div id="status-indicator" style="margin-bottom: 15px;">
+            <span class="status-badge status-pending" id="driver-status">대기 중</span>
+        </div>
+
+        <!-- Log Console -->
+        <div class="log-console" id="log-console">
+            <div class="log-entry info">ORCA GLOP Driver 준비 완료</div>
+            <div class="log-entry info">Product 및 Supplier Category를 선택하고 Drive GLOP 버튼을 클릭하세요.</div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+{% endblock %}

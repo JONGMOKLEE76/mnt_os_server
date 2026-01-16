@@ -43,6 +43,7 @@ class User(Base):
     email = Column(String(100), nullable=False)
     team = Column(String(100), nullable=False)
     company = Column(String(100), nullable=False)
+    contact = Column(String(50))  # 연락처 추가
     status = Column(String(20), default='pending')  # pending, active, rejected
     is_admin = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -72,3 +73,37 @@ class LoginHistory(Base):
 
     def __repr__(self):
         return f"<LoginHistory(user_id={self.user_id}, login_at='{self.login_at}')>"
+
+class MonitorStuffing(Base):
+    """모니터 적재 수량(Stuffing) 기준 정보 모델"""
+    __tablename__ = 'monitor_stuffing'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    series = Column(String(100), unique=True, nullable=False)
+    qty_20ft = Column(Integer)
+    qty_40ft = Column(Integer)
+    qty_40hc = Column(Integer)
+
+    def __repr__(self):
+        return f"<MonitorStuffing(series='{self.series}', qty_20ft={self.qty_20ft})>"
+
+class SiteMapping(Base):
+    """사이트 매핑 정보 모델"""
+    __tablename__ = 'site_mapping'
+
+    ship_to = Column('Ship To', String(100), primary_key=True)
+    to_site = Column('To Site', String(100))
+    region = Column('Region', String(50))
+    country = Column('Country', String(50))
+
+    def __repr__(self):
+        return f"<SiteMapping(ship_to='{self.ship_to}', to_site='{self.to_site}')>"
+
+class OSModel(Base):
+    """아웃소싱 모델 정보 모델"""
+    __tablename__ = 'os_models'
+
+    series = Column('Series', String(100), primary_key=True)
+
+    def __repr__(self):
+        return f"<OSModel(series='{self.series}')>"
