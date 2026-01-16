@@ -64,7 +64,7 @@ def wait_for_new_file(download_dir, initial_files, timeout=60):
         time.sleep(1)
     return None
 
-def save_to_db(file_path, site_name, data_source):
+def save_to_db(file_path, site_name, data_source, skip_model_filter=False):
     """
     다운로드된 엑셀 파일을 읽어 DB(SQLite)에 저장하는 함수.
     엑셀에 포함된 PO 번호들에 대해서만 기존 데이터를 삭제하고 새로 입력하여
@@ -114,35 +114,38 @@ def save_to_db(file_path, site_name, data_source):
                     df.loc[mask, 'Ship To'] = replacement_value
                     print(f"[알림] Ship To '{original_value}' → '{replacement_value}' 로 {mask.sum()}건 변환 완료")
 
-            # --- [추가] 모델 필터링 로직 ---
-            try:
-                # DB에서 os_models 조회
-                with sqlite3.connect(db_path) as tmp_conn:
-                    os_models_df = pd.read_sql("SELECT Series FROM os_models", tmp_conn)
-                
-                valid_series = set(os_models_df['Series'].dropna().unique())
+            # --- [추가] 모델 필터링 로직 (PC 업체는 스킵) ---
+            if not skip_model_filter:
+                try:
+                    # DB에서 os_models 조회
+                    with sqlite3.connect(db_path) as tmp_conn:
+                        os_models_df = pd.read_sql("SELECT Series FROM os_models", tmp_conn)
+                    
+                    valid_series = set(os_models_df['Series'].dropna().unique())
 
-                if 'Model' in df.columns:
-                    # 모델명에서 Series 추출 (예: 27GQ50F-B.AUS -> 27GQ50F)
-                    # 사용자 요청 로직: x.split('-')[0].split('.')[0]
-                    temp_series = df['Model'].astype(str).apply(lambda x: x.split('-')[0].split('.')[0])
+                    if 'Model' in df.columns:
+                        # 모델명에서 Series 추출 (예: 27GQ50F-B.AUS -> 27GQ50F)
+                        # 사용자 요청 로직: x.split('-')[0].split('.')[0]
+                        temp_series = df['Model'].astype(str).apply(lambda x: x.split('-')[0].split('.')[0])
 
-                    # 제외될 모델 식별
-                    excluded_mask = ~temp_series.isin(valid_series)
-                    excluded_models = df.loc[excluded_mask, 'Model'].apply(lambda x: x.split('-')[0].split('.')[0]).unique()
+                        # 제외될 모델 식별
+                        excluded_mask = ~temp_series.isin(valid_series)
+                        excluded_models = df.loc[excluded_mask, 'Model'].apply(lambda x: x.split('-')[0].split('.')[0]).unique()
 
-                    if len(excluded_models) > 0:
-                        print(f"\n[알림] 다음 {len(excluded_models)}개 모델은 os_models에 없어 제외되었습니다:")
-                        for m in excluded_models:
-                            print(f"- {m}")
+                        if len(excluded_models) > 0:
+                            print(f"\n[알림] 다음 {len(excluded_models)}개 모델은 os_models에 없어 제외되었습니다:")
+                            for m in excluded_models:
+                                print(f"- {m}")
 
-                    # 필터링 적용
-                    original_count = len(df)
-                    df = df[~excluded_mask].copy()
-                    print(f"모델 필터링 완료: {original_count} -> {len(df)} 행")
+                        # 필터링 적용
+                        original_count = len(df)
+                        df = df[~excluded_mask].copy()
+                        print(f"모델 필터링 완료: {original_count} -> {len(df)} 행")
 
-            except Exception as e:
-                print(f"모델 필터링 중 오류 발생: {e}")
+                except Exception as e:
+                    print(f"모델 필터링 중 오류 발생: {e}")
+            else:
+                print(f"[알림] PC 업체 - 모델 필터링 스킵 ({len(df)} 행)")
             
             # --- [추가] 날짜 변환 및 데이터 보강 로직 ---
             
@@ -244,7 +247,7 @@ def save_to_db(file_path, site_name, data_source):
     except Exception as e:
         print(f"DB 저장 중 오류 발생: {e}")
 
-def download_excel_for_companies(driver, target_companies):
+def download_excel_for_companies(driver, target_companies, skip_model_filter=False):
     """
     지정된 업체 목록에 대해 업체 선택, 메뉴 이동 및 엑셀 다운로드를 수행하는 함수
     """
@@ -361,7 +364,7 @@ def download_excel_for_companies(driver, target_companies):
                         new_file = wait_for_new_file(DOWNLOAD_DIR, initial_files)
                         if new_file:
                             print(f"새 파일 감지됨: {new_file}")
-                            save_to_db(new_file, company_name, source_name)
+                            save_to_db(new_file, company_name, source_name, skip_model_filter)
                         else:
                             print("다운로드된 새 파일을 찾지 못했습니다.")
                             
@@ -379,6 +382,23 @@ def download_excel_for_companies(driver, target_companies):
         time.sleep(2)
 
 def main():
+    # ========== 사용자 설정 영역 ==========
+    product_category = 'pc'  # 'monitor' 또는 'pc'
+    supplier_category = 'LGEKR'   # 'LGEKR' 또는 'LGECH'
+    # =====================================
+
+    # 업체 목록 정의
+    COMPANIES = {
+        'LGEKR': {
+            'monitor': ['AU OPTRONICS / Monitor', 'BOEVT / MONITOR', 'TCL MOKA / Monitor', 'TCL TTE / Monitor', 'TPV / MNT'],
+            'pc': ['PEGATRON / PC', 'QUANTA / PC', 'WANLIDA / PC']
+        },
+        'LGECH': {
+            'monitor': ['GAO CHUANG / Monitor', 'KTC / Commercial Display', 'MO JIA / Monitor'],
+            'pc': []  # 현재 LGECH에 PC 업체 없음
+        }
+    }
+
     chrome_options = Options()
     # chrome_options.add_argument('--headless')
     
@@ -411,145 +431,141 @@ def main():
                 lambda d: "L-hide-display" in d.find_element(By.ID, "L-gen4").get_attribute("class")
             )
             print('로딩 완료, 메뉴 선택 가능')
+            print(f"\n[설정] Product: {product_category}, Supplier: {supplier_category}")
 
-            # 1. LGEKR 관할 업체 처리
-            target_companies_kr =['AU OPTRONICS / Monitor', 'BOEVT / MONITOR', 'TCL MOKA / Monitor', 'TCL TTE / Monitor', 'TPV / MNT']
-            print("\n>>> LGEKR 관할 업체 처리 시작 <<<")
-            download_excel_for_companies(driver, target_companies_kr)
-
-            # 2. 법인 전환 (LGEKR -> LGECH)
-            try:
-                print("\n>>> 법인 전환 시도 (LGEKR -> LGECH) <<<")
-                open_tab = WebDriverWait(driver, 10).until(
-                    EC.element_to_be_clickable((By.XPATH, "//div[@id='quickMenu']//img"))
-                )
-                open_tab.click()
-                print("'OPEN' 탭 클릭 완료")
-                
-                # iframe 전환
-                iframes = driver.find_elements(By.TAG_NAME, "iframe")
-                target_iframe = None
-                for frame in iframes:
-                    try:
-                        if "goGlobalMap.glop" in frame.get_attribute("src"):
-                            target_iframe = frame
-                            break
-                    except: continue
-                
-                if target_iframe:
-                    driver.switch_to.frame(target_iframe)
+            # LGEKR 업체 처리 (LGEKR 선택 시)
+            if supplier_category == 'LGEKR':
+                target_companies_kr = COMPANIES['LGEKR'].get(product_category, [])
+                if target_companies_kr:
+                    print(f"\n>>> LGEKR 관할 {product_category.upper()} 업체 처리 시작 <<<")
+                    download_excel_for_companies(driver, target_companies_kr, skip_model_filter=(product_category == 'pc'))
                 else:
-                    WebDriverWait(driver, 15).until(EC.frame_to_be_available_and_switch_to_it((By.TAG_NAME, "iframe")))
-                print("iframe 전환 성공")
-                time.sleep(2)
+                    print(f"\n[알림] LGEKR에 {product_category} 업체가 없습니다.")
 
-                # LGEKR 클릭 (그리드 숨기기)
+            # LGECH 업체 처리 (LGECH 선택 시)
+            elif supplier_category == 'LGECH':
+                # 먼저 LGECH로 법인 전환
                 try:
+                    print("\n>>> 법인 전환 시도 (LGEKR -> LGECH) <<<")
+                    open_tab = WebDriverWait(driver, 10).until(
+                        EC.element_to_be_clickable((By.XPATH, "//div[@id='quickMenu']//img"))
+                    )
+                    open_tab.click()
+                    print("'OPEN' 탭 클릭 완료")
+                    
+                    # iframe 전환
+                    iframes = driver.find_elements(By.TAG_NAME, "iframe")
+                    target_iframe = None
+                    for frame in iframes:
+                        try:
+                            if "goGlobalMap.glop" in frame.get_attribute("src"):
+                                target_iframe = frame
+                                break
+                        except: continue
+                    
+                    if target_iframe:
+                        driver.switch_to.frame(target_iframe)
+                    else:
+                        WebDriverWait(driver, 15).until(EC.frame_to_be_available_and_switch_to_it((By.TAG_NAME, "iframe")))
+                    print("iframe 전환 성공")
+                    time.sleep(2)
+
+                    # LGEKR 클릭 (그리드 숨기기)
+                    try:
+                        lgekr_span = WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.ID, "LGEKR")))
+                        driver.execute_script("arguments[0].click();", lgekr_span.find_element(By.TAG_NAME, "a"))
+                        print("'LGEKR' 그리드 숨기기 완료")
+                    except: pass
+                    time.sleep(1)
+
+                    # LGECH 클릭
+                    lgech_span = WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.ID, "LGECH")))
+                    driver.execute_script("arguments[0].click();", lgech_span.find_element(By.TAG_NAME, "a"))
+                    print("'LGECH' 선택 완료")
+                    time.sleep(3)
+
+                    # GAO CHUANG (GMZ) 선택 (LGECH 첫 업체)
+                    supplier_element = WebDriverWait(driver, 20).until(
+                        EC.presence_of_element_located((By.XPATH, "//span[contains(text(), 'GAO CHUANG (GMZ)')]"))
+                    )
+                    driver.execute_script("arguments[0].click();", supplier_element)
+                    print("'GAO CHUANG (GMZ)' 업체 선택 완료")
+                    time.sleep(2)
+
+                    driver.switch_to.default_content()
+                    ActionChains(driver).send_keys(Keys.ESCAPE).perform()
+                    print("모달 닫기 완료")
+                    
+                    # 법인 전환 후 로딩 대기
+                    WebDriverWait(driver, 20).until(
+                        lambda d: "L-hide-display" in d.find_element(By.ID, "L-gen4").get_attribute("class")
+                    )
+                    print("법인 전환 후 로딩 완료")
+
+                except Exception as e_switch:
+                    print(f"법인 전환 실패: {e_switch}")
+                    raise e_switch
+
+                # LGECH 업체 처리
+                target_companies_ch = COMPANIES['LGECH'].get(product_category, [])
+                if target_companies_ch:
+                    print(f"\n>>> LGECH 관할 {product_category.upper()} 업체 처리 시작 <<<")
+                    download_excel_for_companies(driver, target_companies_ch, skip_model_filter=(product_category == 'pc'))
+                else:
+                    print(f"\n[알림] LGECH에 {product_category} 업체가 없습니다.")
+
+                # 최종 원복 (LGECH -> LGEKR) 및 AU OPTRONICS (GMZ) 선택
+                try:
+                    print("\n>>> 최종 원복 시도 (LGECH -> LGEKR) <<<")
+                    open_tab = WebDriverWait(driver, 10).until(
+                        EC.element_to_be_clickable((By.XPATH, "//div[@id='quickMenu']//img"))
+                    )
+                    open_tab.click()
+                    print("'OPEN' 탭 클릭 완료")
+                    
+                    # iframe 전환
+                    iframes = driver.find_elements(By.TAG_NAME, "iframe")
+                    target_iframe = None
+                    for frame in iframes:
+                        try:
+                            if "goGlobalMap.glop" in frame.get_attribute("src"):
+                                target_iframe = frame
+                                break
+                        except: continue
+                    
+                    if target_iframe:
+                        driver.switch_to.frame(target_iframe)
+                    else:
+                        WebDriverWait(driver, 15).until(EC.frame_to_be_available_and_switch_to_it((By.TAG_NAME, "iframe")))
+                    print("iframe 전환 성공")
+                    time.sleep(2)
+
+                    # LGEKR 클릭
                     lgekr_span = WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.ID, "LGEKR")))
                     driver.execute_script("arguments[0].click();", lgekr_span.find_element(By.TAG_NAME, "a"))
-                    print("'LGEKR' 그리드 숨기기 완료")
-                except: pass
-                time.sleep(1)
+                    print("'LGEKR' 선택 완료")
+                    time.sleep(3)
 
-                # LGECH 클릭
-                lgech_span = WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.ID, "LGECH")))
-                driver.execute_script("arguments[0].click();", lgech_span.find_element(By.TAG_NAME, "a"))
-                print("'LGECH' 선택 완료")
-                time.sleep(3)
+                    # AU OPTRONICS (GMZ) 선택
+                    supplier_element = WebDriverWait(driver, 20).until(
+                        EC.presence_of_element_located((By.XPATH, "//span[contains(text(), 'AU OPTRONICS (GMZ)')]"))
+                    )
+                    driver.execute_script("arguments[0].click();", supplier_element)
+                    print("'AU OPTRONICS (GMZ)' 업체 선택 완료")
+                    time.sleep(2)
 
-                # GAO CHUANG (GMZ) 선택
-                supplier_element = WebDriverWait(driver, 20).until(
-                    EC.presence_of_element_located((By.XPATH, "//span[contains(text(), 'GAO CHUANG (GMZ)')]"))
-                )
-                driver.execute_script("arguments[0].click();", supplier_element)
-                print("'GAO CHUANG (GMZ)' 업체 선택 완료")
-                time.sleep(2)
+                    driver.switch_to.default_content()
+                    ActionChains(driver).send_keys(Keys.ESCAPE).perform()
+                    print("모달 닫기 완료 및 최종 원복 성공")
 
-                driver.switch_to.default_content()
-                ActionChains(driver).send_keys(Keys.ESCAPE).perform()
-                print("모달 닫기 완료")
-                
-                # 법인 전환 후 로딩 대기
-                WebDriverWait(driver, 20).until(
-                    lambda d: "L-hide-display" in d.find_element(By.ID, "L-gen4").get_attribute("class")
-                )
-                print("법인 전환 후 로딩 완료")
-
-            except Exception as e_switch:
-                print(f"법인 전환 실패: {e_switch}")
-                raise e_switch
-
-            # 3. LGECH 관할 업체 처리
-            target_companies_ch = ['GAO CHUANG / Monitor', 'KTC / Commercial Display', 'MO JIA / Monitor']
-            print("\n>>> LGECH 관할 업체 처리 시작 <<<")
-            download_excel_for_companies(driver, target_companies_ch)
-
-            # 4. 최종 원복 (LGECH -> LGEKR) 및 AU OPTRONICS (GMZ) 선택
-            try:
-                print("\n>>> 최종 원복 시도 (LGECH -> LGEKR) <<<")
-                open_tab = WebDriverWait(driver, 10).until(
-                    EC.element_to_be_clickable((By.XPATH, "//div[@id='quickMenu']//img"))
-                )
-                open_tab.click()
-                print("'OPEN' 탭 클릭 완료")
-                
-                # iframe 전환
-                iframes = driver.find_elements(By.TAG_NAME, "iframe")
-                target_iframe = None
-                for frame in iframes:
-                    try:
-                        if "goGlobalMap.glop" in frame.get_attribute("src"):
-                            target_iframe = frame
-                            break
-                    except: continue
-                
-                if target_iframe:
-                    driver.switch_to.frame(target_iframe)
-                else:
-                    WebDriverWait(driver, 15).until(EC.frame_to_be_available_and_switch_to_it((By.TAG_NAME, "iframe")))
-                print("iframe 전환 성공")
-                time.sleep(2)
-
-                # LGEKR 클릭
-                lgekr_span = WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.ID, "LGEKR")))
-                driver.execute_script("arguments[0].click();", lgekr_span.find_element(By.TAG_NAME, "a"))
-                print("'LGEKR' 선택 완료")
-                time.sleep(3)
-
-                # AU OPTRONICS (GMZ) 선택
-                supplier_element = WebDriverWait(driver, 20).until(
-                    EC.presence_of_element_located((By.XPATH, "//span[contains(text(), 'AU OPTRONICS (GMZ)')]"))
-                )
-                driver.execute_script("arguments[0].click();", supplier_element)
-                print("'AU OPTRONICS (GMZ)' 업체 선택 완료")
-                time.sleep(2)
-
-                driver.switch_to.default_content()
-                ActionChains(driver).send_keys(Keys.ESCAPE).perform()
-                print("모달 닫기 완료 및 최종 원복 성공")
-
-            except Exception as e_revert:
-                print(f"최종 원복 실패: {e_revert}")
-                # 원복 실패는 전체 프로세스 실패로 간주하지 않음
+                except Exception as e_revert:
+                    print(f"최종 원복 실패: {e_revert}")
 
         except Exception as e:
             print('자동화 프로세스 중 오류:', e)
 
     finally:
         driver.quit()
-
-        # 최신 엑셀 파일 확인
-        try:
-            download_dir = r"C:\Users\pcuser\Downloads"
-            pattern = os.path.join(download_dir, "poshThru_*.xls*")
-            files = glob.glob(pattern)
-            if files:
-                latest_file = max(files, key=os.path.getctime)
-                print(f"\n최신 다운로드 파일: {latest_file}")
-                df = pd.read_excel(latest_file)
-                print(df.head())
-        except Exception as e:
-            print(f"엑셀 확인 오류: {e}")
 
 if __name__ == '__main__':
     main()
