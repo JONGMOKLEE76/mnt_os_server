@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, UniqueConstraint, Text
 from sqlalchemy.orm import relationship
 from database import Base
 from datetime import datetime
@@ -107,3 +107,37 @@ class OSModel(Base):
 
     def __repr__(self):
         return f"<OSModel(series='{self.series}')>"
+
+class WorkDiary(Base):
+    """업무 일지(Work Diary) 모델"""
+    __tablename__ = 'work_diary'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    title = Column(String(200), nullable=False)
+    content = Column(Text, nullable=False)  # HTML content
+    author_id = Column(Integer, ForeignKey('users.id'))
+    hashtags = Column(String(500))  # Comma-separated
+    status = Column(String(20), default='진행중')  # 진행중, 완료
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    author = relationship('User', backref='work_entries')
+    comments = relationship('Comment', back_populates='work_entry', cascade="all, delete-orphan")
+
+    def __repr__(self):
+        return f"<WorkDiary(id={self.id}, title='{self.title}', status='{self.status}')>"
+
+class Comment(Base):
+    """댓글 모델"""
+    __tablename__ = 'comments'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    work_entry_id = Column(Integer, ForeignKey('work_diary.id'), nullable=False)
+    author_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    work_entry = relationship('WorkDiary', back_populates='comments')
+    author = relationship('User', backref='diary_comments')
+
+    def __repr__(self):
+        return f"<Comment(id={self.id}, work_entry_id={self.work_entry_id})>"

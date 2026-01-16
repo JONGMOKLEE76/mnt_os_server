@@ -1,8 +1,12 @@
 from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, Response
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 import pandas as pd
+from sqlalchemy import and_
 from database import init_db, upsert_dataframe, db_session, engine
-from models import ShipmentPlan, User, LoginHistory, MonitorStuffing, SiteMapping, OSModel
+from models import ShipmentPlan, User, LoginHistory, MonitorStuffing, SiteMapping, OSModel, WorkDiary, Comment
+import os
+import uuid
+import base64
 import logging
 import socket
 import json
@@ -170,10 +174,20 @@ def sp_visualization():
 def container_simulation():
     return render_template('placeholder.html', title='Container Simulation')
 
-@app.route('/issues')
+@app.route('/work-diary')
 @login_required
-def issues():
-    return render_template('placeholder.html', title='업무 이슈 게시판')
+def work_diary():
+    return render_template('work_diary.html')
+
+@app.route('/work-diary/new')
+@login_required
+def work_diary_new():
+    return render_template('work_diary_new.html')
+
+@app.route('/work-diary/<int:entry_id>')
+@login_required
+def work_diary_detail(entry_id):
+    return render_template('work_diary_detail.html', entry_id=entry_id)
 
 @app.route('/mypage')
 @login_required
@@ -293,6 +307,186 @@ def delete_master_data(table_name, pk_value):
         return jsonify({"message": "Deleted successfully"}), 200
     except Exception as e:
         db_session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+# ==================== WORK DIARY API ====================
+
+@app.route('/api/work-diary', methods=['GET'])
+@login_required
+def get_work_entries():
+    status_filter = request.args.get('status')
+    author_filter = request.args.get('author')
+    keyword_filter = request.args.get('keyword')
+    hashtag_filter = request.args.get('hashtag')
+    from_date = request.args.get('from_date')
+    to_date = request.args.get('to_date')
+
+    query = db_session.query(WorkDiary)
+    
+    if status_filter:
+        query = query.filter(WorkDiary.status == status_filter)
+    if author_filter:
+        query = query.join(User).filter(User.userid.like(f"%{author_filter}%"))
+    if keyword_filter:
+        query = query.filter(WorkDiary.title.like(f"%{keyword_filter}%"))
+    if hashtag_filter:
+        query = query.filter(WorkDiary.hashtags.like(f"%{hashtag_filter}%"))
+    if from_date:
+        query = query.filter(WorkDiary.created_at >= datetime.strptime(from_date, '%Y-%m-%d'))
+    if to_date:
+        # Add 1 day to to_date to include the entire day
+        end_date = datetime.strptime(to_date, '%Y-%m-%d') + timedelta(days=1)
+        query = query.filter(WorkDiary.created_at < end_date)
+    
+    entries = query.order_by(WorkDiary.created_at.desc()).all()
+    data = []
+    for entry in entries:
+        data.append({
+            "id": entry.id,
+            "title": entry.title,
+            "author": entry.author.userid,
+            "status": entry.status,
+            "created_at": entry.created_at.strftime('%Y-%m-%d %H:%M'),
+            "comment_count": len(entry.comments),
+            "is_author": entry.author_id == current_user.id or current_user.is_admin
+        })
+    return jsonify(data)
+
+@app.route('/api/work-diary', methods=['POST'])
+@login_required
+def create_work_entry():
+    data = request.get_json()
+    try:
+        new_entry = WorkDiary(
+            title=data['title'],
+            content=data['content'],
+            author_id=current_user.id,
+            hashtags=data.get('hashtags', ''),
+            status=data.get('status', '진행중')
+        )
+        db_session.add(new_entry)
+        db_session.commit()
+        return jsonify({"message": "Created successfully", "id": new_entry.id}), 201
+    except Exception as e:
+        db_session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/work-diary/<int:entry_id>', methods=['GET'])
+@login_required
+def get_work_entry_detail(entry_id):
+    entry = db_session.query(WorkDiary).get(entry_id)
+    if not entry:
+        return jsonify({"error": "Entry not found"}), 404
+    
+    comments = []
+    for c in entry.comments:
+        comments.append({
+            "id": c.id,
+            "author": c.author.userid,
+            "content": c.content,
+            "created_at": c.created_at.strftime('%Y-%m-%d %H:%M')
+        })
+        
+    return jsonify({
+        "id": entry.id,
+        "title": entry.title,
+        "content": entry.content,
+        "author": entry.author.userid,
+        "status": entry.status,
+        "hashtags": entry.hashtags,
+        "created_at": entry.created_at.strftime('%Y-%m-%d %H:%M'),
+        "comments": comments,
+        "is_author": entry.author_id == current_user.id or current_user.is_admin
+    })
+
+@app.route('/api/work-diary/<int:entry_id>', methods=['PUT'])
+@login_required
+def update_work_entry(entry_id):
+    entry = db_session.query(WorkDiary).get(entry_id)
+    if not entry:
+        return jsonify({"error": "Entry not found"}), 404
+    
+    if entry.author_id != current_user.id and not current_user.is_admin:
+        return jsonify({"error": "Unauthorized"}), 403
+    
+    data = request.get_json()
+    try:
+        if 'title' in data: entry.title = data['title']
+        if 'content' in data: entry.content = data['content']
+        if 'status' in data: entry.status = data['status']
+        if 'hashtags' in data: entry.hashtags = data['hashtags']
+        db_session.commit()
+        return jsonify({"message": "Updated successfully"}), 200
+    except Exception as e:
+        db_session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/work-diary/<int:entry_id>', methods=['DELETE'])
+@login_required
+def delete_work_entry(entry_id):
+    entry = db_session.query(WorkDiary).get(entry_id)
+    if not entry:
+        return jsonify({"error": "Entry not found"}), 404
+    
+    if entry.author_id != current_user.id and not current_user.is_admin:
+        return jsonify({"error": "Unauthorized"}), 403
+    
+    try:
+        db_session.delete(entry)
+        db_session.commit()
+        return jsonify({"message": "Deleted successfully"}), 200
+    except Exception as e:
+        db_session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/work-diary/<int:entry_id>/comments', methods=['POST'])
+@login_required
+def add_comment(entry_id):
+    data = request.get_json()
+    try:
+        new_comment = Comment(
+            work_entry_id=entry_id,
+            author_id=current_user.id,
+            content=data['content']
+        )
+        db_session.add(new_comment)
+        db_session.commit()
+        return jsonify({"message": "Comment added"}), 201
+    except Exception as e:
+        db_session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/upload-image', methods=['POST'])
+@login_required
+def upload_image():
+    data = request.get_json()
+    image_data = data.get('image')
+    if not image_data:
+        return jsonify({"error": "No image data"}), 400
+    
+    try:
+        # Decode base64
+        header, encoded = image_data.split(",", 1)
+        ext = header.split(";")[0].split("/")[1]
+        file_data = base64.b64decode(encoded)
+        
+        # Check size (500KB)
+        if len(file_data) > 500 * 1024:
+            return jsonify({"error": "Image too large (max 500KB)"}), 400
+            
+        # Save file
+        folder = os.path.join('server', 'static', 'uploads', 'diary', datetime.now().strftime('%Y%m'))
+        if not os.path.exists(folder):
+            os.makedirs(folder)
+            
+        filename = f"{uuid.uuid4()}.{ext}"
+        filepath = os.path.join(folder, filename)
+        with open(filepath, "wb") as f:
+            f.write(file_data)
+            
+        url = f"/static/uploads/diary/{datetime.now().strftime('%Y%m')}/{filename}"
+        return jsonify({"url": url}), 200
+    except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 @app.route('/admin/approve/<int:user_id>', methods=['POST'])

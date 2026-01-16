@@ -1,0 +1,136 @@
+{% extends "layout.html" %}
+
+{% block title %}Work Diary{% endblock %}
+
+{% block page_title %}📖 Work Diary{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <div class="glass-card">
+        <div class="master-data-header" style="flex-wrap: wrap; gap: 15px;">
+            <div class="filter-group" style="display: flex; flex-wrap: wrap; gap: 15px; align-items: center;">
+                <div class="search-item">
+                    <label>Status:</label>
+                    <select id="status-filter" class="form-input" style="width: 100px;">
+                        <option value="">All</option>
+                        <option value="진행중">진행중</option>
+                        <option value="완료">완료</option>
+                    </select>
+                </div>
+                <div class="search-item">
+                    <label>Author:</label>
+                    <input type="text" id="author-search" class="form-input" placeholder="User ID"
+                        style="width: 120px;">
+                </div>
+                <div class="search-item">
+                    <label>Keyword:</label>
+                    <input type="text" id="keyword-search" class="form-input" placeholder="Title..."
+                        style="width: 150px;">
+                </div>
+                <div class="search-item">
+                    <label>From:</label>
+                    <input type="date" id="from-date" class="form-input" style="width: 140px;">
+                </div>
+                <div class="search-item">
+                    <label>To:</label>
+                    <input type="date" id="to-date" class="form-input" style="width: 140px;">
+                </div>
+                <button id="search-btn" class="btn btn-secondary" style="width: auto; padding: 10px 15px;">
+                    <i class="fas fa-search"></i>
+                </button>
+            </div>
+            <a href="/work-diary/new" class="btn btn-primary"
+                style="width: auto; padding: 10px 20px; text-decoration: none; display: inline-flex; align-items: center; gap: 8px;">
+                <i class="fas fa-plus"></i> New Entry
+            </a>
+        </div>
+
+        <div class="diary-list" id="diary-list" style="margin-top: 20px;">
+            <!-- Dynamic Content -->
+        </div>
+    </div>
+</div>
+
+<style>
+    .search-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .search-item label {
+        font-size: 0.85rem;
+        color: var(--text-secondary);
+        white-space: nowrap;
+    }
+
+    .diary-item {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid var(--border-glass);
+        border-radius: 16px;
+        padding: 20px;
+        margin-bottom: 15px;
+        transition: all 0.3s ease;
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .diary-item:hover {
+        background: var(--surface-glass-hover);
+        transform: translateX(5px);
+        border-color: var(--accent-teal);
+    }
+
+    .diary-info h3 {
+        margin-bottom: 8px;
+        color: var(--accent-teal);
+    }
+
+    .diary-meta {
+        font-size: 0.85rem;
+        color: var(--text-muted);
+        display: flex;
+        gap: 15px;
+        flex-wrap: wrap;
+    }
+
+    .diary-status {
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+    .status-진행중 {
+        background: rgba(0, 217, 255, 0.15);
+        color: var(--accent-teal);
+    }
+
+    .status-완료 {
+        background: rgba(0, 230, 118, 0.15);
+        color: var(--success);
+    }
+
+    .diary-stats {
+        display: flex;
+        gap: 15px;
+        color: var(--text-secondary);
+    }
+
+    .hashtag-link {
+        color: var(--accent-teal);
+        text-decoration: none;
+        cursor: pointer;
+    }
+
+    .hashtag-link:hover {
+        text-decoration: underline;
+    }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/work_diary.js') }}"></script>
+{% endblock %}

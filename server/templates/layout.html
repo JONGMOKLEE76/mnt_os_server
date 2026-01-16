@@ -67,10 +67,10 @@
                     <i class="fas fa-ship"></i>
                     <span>Container Simulation</span>
                 </a>
-                <a href="{{ url_for('issues') }}"
-                    class="nav-item {% if request.endpoint == 'issues' %}active{% endif %}" title="업무 이슈 게시판">
-                    <i class="fas fa-clipboard-list"></i>
-                    <span>업무 이슈 게시판</span>
+                <a href="{{ url_for('work_diary') }}"
+                    class="nav-item {% if request.endpoint == 'work_diary' %}active{% endif %}" title="Work Diary">
+                    <i class="fas fa-book"></i>
+                    <span>Work Diary</span>
                 </a>
                 <a href="{{ url_for('mypage') }}"
                     class="nav-item {% if request.endpoint == 'mypage' %}active{% endif %}" title="My Page">

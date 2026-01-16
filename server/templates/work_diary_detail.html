@@ -1,0 +1,192 @@
+{% extends "layout.html" %}
+
+{% block title %}Work Diary Detail{% endblock %}
+
+{% block page_title %}📖 Work Diary Detail{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <div class="glass-card" style="max-width: 1000px; margin: 0 auto;">
+        <div id="entry-detail">
+            <!-- Dynamic Content will be rendered here -->
+        </div>
+
+        <!-- Action Buttons (Moved to bottom) -->
+        <div id="author-actions"
+            style="display: none; justify-content: flex-end; gap: 15px; margin-top: 30px; padding-top: 20px; border-top: 1px solid var(--border-glass);">
+            <button id="delete-entry-btn" class="btn btn-danger" style="width: auto; padding: 10px 25px;">
+                <i class="fas fa-trash"></i> Delete
+            </button>
+            <button id="save-entry-btn" class="btn btn-primary" style="width: auto; padding: 10px 30px;">
+                <i class="fas fa-save"></i> Save Changes
+            </button>
+        </div>
+
+        <!-- Comments Section -->
+        <div class="comments-section"
+            style="margin-top: 50px; border-top: 1px solid var(--border-glass); padding-top: 30px;">
+            <h3>Comments</h3>
+            <div id="comments-list" style="margin-top: 20px;">
+                <!-- Dynamic Comments -->
+            </div>
+
+            <div class="comment-form" style="margin-top: 30px;">
+                <div class="form-group">
+                    <textarea id="comment-input" class="form-input" placeholder="Add a comment..."
+                        style="min-height: 100px;"></textarea>
+                </div>
+                <div class="comment-actions"
+                    style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
+                    <div class="emoji-picker" style="display: flex; flex-wrap: wrap; gap: 5px; max-width: 400px;">
+                        <!-- Expanded Emojis -->
+                        <button type="button" class="btn btn-secondary emoji-btn"
+                            style="width: auto; padding: 5px 10px;">😊</button>
+                        <button type="button" class="btn btn-secondary emoji-btn"
+                            style="width: auto; padding: 5px 10px;">😂</button>
+                        <button type="button" class="btn btn-secondary emoji-btn"
+                            style="width: auto; padding: 5px 10px;">🤣</button>
+                        <button type="button" class="btn btn-secondary emoji-btn"
+                            style="width: auto; padding: 5px 10px;">😍</button>
+                        <button type="button" class="btn btn-secondary emoji-btn"
+                            style="width: auto; padding: 5px 10px;">🤔</button>
+                        <button type="button" class="btn btn-secondary emoji-btn"
+                            style="width: auto; padding: 5px 10px;">👍</button>
+                        <button type="button" class="btn btn-secondary emoji-btn"
+                            style="width: auto; padding: 5px 10px;">🙌</button>
+                        <button type="button" class="btn btn-secondary emoji-btn"
+                            style="width: auto; padding: 5px 10px;">👏</button>
+                        <button type="button" class="btn btn-secondary emoji-btn"
+                            style="width: auto; padding: 5px 10px;">🔥</button>
+                        <button type="button" class="btn btn-secondary emoji-btn"
+                            style="width: auto; padding: 5px 10px;">✨</button>
+                        <button type="button" class="btn btn-secondary emoji-btn"
+                            style="width: auto; padding: 5px 10px;">🚀</button>
+                        <button type="button" class="btn btn-secondary emoji-btn"
+                            style="width: auto; padding: 5px 10px;">✅</button>
+                        <button type="button" class="btn btn-secondary emoji-btn"
+                            style="width: auto; padding: 5px 10px;">❌</button>
+                        <button type="button" class="btn btn-secondary emoji-btn"
+                            style="width: auto; padding: 5px 10px;">⚠️</button>
+                        <button type="button" class="btn btn-secondary emoji-btn"
+                            style="width: auto; padding: 5px 10px;">💡</button>
+                        <button type="button" class="btn btn-secondary emoji-btn"
+                            style="width: auto; padding: 5px 10px;">📢</button>
+                        <button type="button" class="btn btn-secondary emoji-btn"
+                            style="width: auto; padding: 5px 10px;">🛠️</button>
+                        <button type="button" class="btn btn-secondary emoji-btn"
+                            style="width: auto; padding: 5px 10px;">📦</button>
+                    </div>
+                    <button id="submit-comment" class="btn btn-primary" style="width: auto; padding: 10px 25px;">Post
+                        Comment</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .entry-header {
+        margin-bottom: 25px;
+    }
+
+    .entry-title {
+        font-size: 2.5rem;
+        color: var(--accent-teal);
+        margin-bottom: 15px;
+        padding: 5px;
+        border-radius: 8px;
+        transition: background 0.3s;
+    }
+
+    .entry-title[contenteditable="true"]:hover {
+        background: rgba(255, 255, 255, 0.05);
+        cursor: text;
+    }
+
+    .entry-title[contenteditable="true"]:focus {
+        outline: none;
+        background: rgba(255, 255, 255, 0.1);
+        box-shadow: 0 0 0 2px var(--accent-teal);
+    }
+
+    .entry-meta {
+        display: flex;
+        gap: 20px;
+        color: var(--text-muted);
+        font-size: 0.95rem;
+        flex-wrap: wrap;
+        margin-bottom: 20px;
+    }
+
+    .entry-content {
+        line-height: 1.8;
+        color: var(--text-primary);
+        background: rgba(0, 0, 0, 0.2);
+        padding: 40px;
+        border-radius: 20px;
+        min-height: 300px;
+        font-size: 1.1rem;
+        transition: all 0.3s;
+    }
+
+    .entry-content[contenteditable="true"]:focus {
+        outline: none;
+        background: rgba(0, 0, 0, 0.3);
+        box-shadow: 0 0 0 2px var(--accent-teal);
+    }
+
+    .entry-content img {
+        max-width: 100%;
+        border-radius: 12px;
+        margin: 20px 0;
+        border: 1px solid var(--border-glass);
+    }
+
+    .comment-item {
+        background: rgba(255, 255, 255, 0.03);
+        padding: 20px;
+        border-radius: 16px;
+        margin-bottom: 15px;
+        border: 1px solid var(--border-glass);
+    }
+
+    .comment-header {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 10px;
+        font-size: 0.9rem;
+    }
+
+    .comment-author {
+        font-weight: 600;
+        color: var(--accent-teal);
+    }
+
+    .comment-date {
+        color: var(--text-muted);
+    }
+
+    .hashtag-link {
+        color: var(--accent-teal);
+        text-decoration: none;
+        cursor: pointer;
+    }
+
+    .hashtag-link:hover {
+        text-decoration: underline;
+    }
+
+    .emoji-btn:hover {
+        transform: scale(1.2);
+        background: var(--accent-teal) !important;
+        color: white !important;
+    }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const ENTRY_ID = {{ entry_id if entry_id else 'null' }};
+</script>
+<script src="{{ url_for('static', filename='js/work_diary.js') }}"></script>
+{% endblock %}
