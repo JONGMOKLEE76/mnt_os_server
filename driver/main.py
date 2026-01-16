@@ -19,6 +19,12 @@ DOWNLOAD_DIR = os.path.join(os.path.expanduser("~"), "Downloads")
 # Chrome WebDriver 경로 (driver 폴더 내의 chromedriver.exe 사용)
 CHROME_DRIVER_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'chromedriver.exe')
 
+def log_msg(message, log_queue=None):
+    """로그 메시지를 출력하거나 큐에 전송하는 함수"""
+    print(message)
+    if log_queue:
+        log_queue.put({'type': 'log', 'message': str(message)})
+
 def get_weekname(date):
     """
     특정 datetime 날짜를 입력받아서 해당 날짜에 해당하는 isocalendar 기준의 week name을 text로 생성하는 함수
@@ -64,7 +70,7 @@ def wait_for_new_file(download_dir, initial_files, timeout=60):
         time.sleep(1)
     return None
 
-def save_to_db(file_path, site_name, data_source, skip_model_filter=False):
+def save_to_db(file_path, site_name, data_source, skip_model_filter=False, log_queue=None):
     """
     다운로드된 엑셀 파일을 읽어 DB(SQLite)에 저장하는 함수.
     엑셀에 포함된 PO 번호들에 대해서만 기존 데이터를 삭제하고 새로 입력하여
@@ -74,10 +80,10 @@ def save_to_db(file_path, site_name, data_source, skip_model_filter=False):
     db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "mnt_data.db")
     try:
         if not file_path or not os.path.exists(file_path):
-            print(f"파일을 찾을 수 없습니다: {file_path}")
+            log_msg(f"파일을 찾을 수 없습니다: {file_path}", log_queue)
             return
 
-        print(f"DB 저장 중: {os.path.basename(file_path)} (Site: {site_name})")
+        log_msg(f"DB 저장 중: {os.path.basename(file_path)} (Site: {site_name})", log_queue)
         
         df = None
         # 1. 엑셀 읽기 (HTML 형식 포함 처리)
@@ -92,7 +98,7 @@ def save_to_db(file_path, site_name, data_source, skip_model_filter=False):
             else:
                 df = pd.read_excel(file_path)
         except Exception as e:
-            print(f"엑셀 읽기 실패: {e}")
+            log_msg(f"엑셀 읽기 실패: {e}", log_queue)
             return
 
         if df is not None:
@@ -112,7 +118,7 @@ def save_to_db(file_path, site_name, data_source, skip_model_filter=False):
                 mask = df['Ship To'] == original_value
                 if mask.any():
                     df.loc[mask, 'Ship To'] = replacement_value
-                    print(f"[알림] Ship To '{original_value}' → '{replacement_value}' 로 {mask.sum()}건 변환 완료")
+                    log_msg(f"[알림] Ship To '{original_value}' → '{replacement_value}' 로 {mask.sum()}건 변환 완료", log_queue)
 
             # --- [추가] 모델 필터링 로직 (PC 업체는 스킵) ---
             if not skip_model_filter:
@@ -133,19 +139,19 @@ def save_to_db(file_path, site_name, data_source, skip_model_filter=False):
                         excluded_models = df.loc[excluded_mask, 'Model'].apply(lambda x: x.split('-')[0].split('.')[0]).unique()
 
                         if len(excluded_models) > 0:
-                            print(f"\n[알림] 다음 {len(excluded_models)}개 모델은 os_models에 없어 제외되었습니다:")
+                            log_msg(f"\n[알림] 다음 {len(excluded_models)}개 모델은 os_models에 없어 제외되었습니다:", log_queue)
                             for m in excluded_models:
-                                print(f"- {m}")
+                                log_msg(f"- {m}", log_queue)
 
                         # 필터링 적용
                         original_count = len(df)
                         df = df[~excluded_mask].copy()
-                        print(f"모델 필터링 완료: {original_count} -> {len(df)} 행")
+                        log_msg(f"모델 필터링 완료: {original_count} -> {len(df)} 행", log_queue)
 
                 except Exception as e:
-                    print(f"모델 필터링 중 오류 발생: {e}")
+                    log_msg(f"모델 필터링 중 오류 발생: {e}", log_queue)
             else:
-                print(f"[알림] PC 업체 - 모델 필터링 스킵 ({len(df)} 행)")
+                log_msg(f"[알림] PC 업체 - 모델 필터링 스킵 ({len(df)} 행)", log_queue)
             
             # --- [추가] 날짜 변환 및 데이터 보강 로직 ---
             
@@ -245,15 +251,15 @@ def save_to_db(file_path, site_name, data_source, skip_model_filter=False):
                 conn.close()
                 
     except Exception as e:
-        print(f"DB 저장 중 오류 발생: {e}")
+        log_msg(f"DB 저장 중 오류 발생: {e}", log_queue)
 
-def download_excel_for_companies(driver, target_companies, skip_model_filter=False):
+def download_excel_for_companies(driver, target_companies, skip_model_filter=False, log_queue=None):
     """
     지정된 업체 목록에 대해 업체 선택, 메뉴 이동 및 엑셀 다운로드를 수행하는 함수
     """
 
     for company_name in target_companies:
-        print(f"\n--- [{company_name}] 처리 시작 ---")
+        log_msg(f"\n--- [{company_name}] 처리 시작 ---", log_queue)
         
         # 커스텀 드롭다운 UI에서 업체 선택
         try:
@@ -267,18 +273,18 @@ def download_excel_for_companies(driver, target_companies, skip_model_filter=Fal
                 EC.element_to_be_clickable((By.XPATH, company_xpath))
             )
             company_elem.click()
-            print(f'업체 선택 완료: {company_name}')
+            log_msg(f'업체 선택 완료: {company_name}', log_queue)
             
             # 업체 선택 후에도 spin 요소가 사라질 때까지 대기
             try:
                 WebDriverWait(driver, 20).until(
                     lambda d: "L-hide-display" in d.find_element(By.ID, "L-gen4").get_attribute("class")
                 )
-                print('업체 선택 후 로딩 완료')
+                log_msg('업체 선택 후 로딩 완료', log_queue)
             except Exception as e:
-                print('업체 선택 후 로딩 대기 중 오류:', e)
+                log_msg(f'업체 선택 후 로딩 대기 중 오류: {e}', log_queue)
         except Exception as e:
-            print(f'업체 선택 중 오류 ({company_name}):', e)
+            log_msg(f'업체 선택 중 오류 ({company_name}): {e}', log_queue)
             continue # 다음 업체로 진행
 
         # 메뉴 목록 정의 (NERP 및 GERP)
@@ -290,7 +296,7 @@ def download_excel_for_companies(driver, target_companies, skip_model_filter=Fal
         for menu in menus:
             menu_text = menu['text']
             source_name = menu['source']
-            print(f"  >> 메뉴 처리 시작: {menu_text} (Source: {source_name})")
+            log_msg(f"  >> 메뉴 처리 시작: {menu_text} (Source: {source_name})", log_queue)
 
             # Shipping & Invoicing 상단 메뉴에 마우스 오버 및 하위 메뉴 클릭
             try:
@@ -298,7 +304,7 @@ def download_excel_for_companies(driver, target_companies, skip_model_filter=Fal
                     EC.presence_of_element_located((By.ID, "mNavi_2"))
                 )
                 ActionChains(driver).move_to_element(menu_li).perform()
-                print('상단 Shipping & Invoicing 메뉴에 마우스 오버 완료')
+                log_msg('상단 Shipping & Invoicing 메뉴에 마우스 오버 완료', log_queue)
                 time.sleep(1)
                 
                 # 메뉴 찾기 (Text 또는 Href)
@@ -313,7 +319,7 @@ def download_excel_for_companies(driver, target_companies, skip_model_filter=Fal
                     EC.element_to_be_clickable((By.XPATH, xpath))
                 )
                 submenu.click()
-                print(f'하위 {menu_text} 메뉴 클릭 완료')
+                log_msg(f'하위 {menu_text} 메뉴 클릭 완료', log_queue)
                 
                 # 하위 메뉴 클릭 후 spin 요소가 사라질 때까지 대기
                 try:
@@ -321,7 +327,7 @@ def download_excel_for_companies(driver, target_companies, skip_model_filter=Fal
                     WebDriverWait(driver, 30).until(
                         lambda d: "L-hide-display" in d.find_element(By.ID, "L-gen7").get_attribute("class")
                     )
-                    print('하위 메뉴 이동 후 로딩 완료 (L-gen7 확인)')
+                    log_msg('하위 메뉴 이동 후 로딩 완료 (L-gen7 확인)', log_queue)
                     
                     # spin 사라진 후 엑셀 다운로드 버튼 클릭
                     try:
@@ -342,49 +348,51 @@ def download_excel_for_companies(driver, target_companies, skip_model_filter=Fal
                             WebDriverWait(driver, 20).until(
                                 lambda d: "L-hide-display" in d.find_element(By.ID, "L-gen7").get_attribute("class")
                             )
-                            print('로딩 마스크(L-gen7) 해제 확인 완료')
+                            log_msg('로딩 마스크(L-gen7) 해제 확인 완료', log_queue)
                         except Exception as e:
-                            print(f'로딩 대기 중 타임아웃 또는 오류: {e}')
+                            log_msg(f'로딩 대기 중 타임아웃 또는 오류: {e}', log_queue)
                             pass
 
                         excel_btn.click()
-                        print('엑셀 다운로드 버튼 클릭 완료')
+                        log_msg('엑셀 다운로드 버튼 클릭 완료', log_queue)
 
                         # Native Alert 시도 (안전장치)
                         try:
                             WebDriverWait(driver, 3).until(EC.alert_is_present())
                             alert = driver.switch_to.alert
                             alert.accept()
-                            print('Native Alert 수락 완료')
+                            log_msg('Native Alert 수락 완료', log_queue)
                         except:
                             pass
                         
                         # 파일 다운로드 대기 및 업데이트
-                        print(f"파일 다운로드 대기 중 (Max 60s)...")
+                        log_msg(f"파일 다운로드 대기 중 (Max 60s)...", log_queue)
                         new_file = wait_for_new_file(DOWNLOAD_DIR, initial_files)
                         if new_file:
-                            print(f"새 파일 감지됨: {new_file}")
-                            save_to_db(new_file, company_name, source_name, skip_model_filter)
+                            log_msg(f"새 파일 감지됨: {new_file}", log_queue)
+                            save_to_db(new_file, company_name, source_name, skip_model_filter, log_queue)
                         else:
-                            print("다운로드된 새 파일을 찾지 못했습니다.")
+                            log_msg("다운로드된 새 파일을 찾지 못했습니다.", log_queue)
                             
                     except Exception as e:
-                        print('엑셀 다운로드 버튼 클릭 중 오류:', e)
+                        log_msg(f'엑셀 다운로드 버튼 클릭 중 오류: {e}', log_queue)
 
                 except Exception as e:
-                    print('하위 메뉴 이동 후 로딩 대기 중 오류:', e)
+                    log_msg(f'하위 메뉴 이동 후 로딩 대기 중 오류: {e}', log_queue)
             except Exception as e:
-                print(f'메뉴 자동화 중 오류 ({menu_text}):', e)
+                log_msg(f'메뉴 자동화 중 오류 ({menu_text}): {e}', log_queue)
             
             time.sleep(1) # 메뉴 간 잠시 대기
         
-        print(f"--- [{company_name}] 처리 완료 ---\n")
+        log_msg(f"--- [{company_name}] 처리 완료 ---\n", log_queue)
         time.sleep(2)
 
-def main():
+def main(product_category=None, supplier_category=None, log_queue=None):
     # ========== 사용자 설정 영역 ==========
-    product_category = 'pc'  # 'monitor' 또는 'pc'
-    supplier_category = 'LGEKR'   # 'LGEKR' 또는 'LGECH'
+    if product_category is None:
+        product_category = 'pc'  # 'monitor' 또는 'pc'
+    if supplier_category is None:
+        supplier_category = 'LGEKR'   # 'LGEKR' 또는 'LGECH'
     # =====================================
 
     # 업체 목록 정의
@@ -425,33 +433,33 @@ def main():
                 parent_form = login_img.find_element(By.XPATH, './ancestor::form')
                 submit_btn = parent_form.find_element(By.XPATH, ".//input[@type='submit' or @type='image']")
                 submit_btn.click()
-            print('로그인 시도 완료')
+            log_msg('로그인 시도 완료', log_queue)
             
             WebDriverWait(driver, 20).until(
                 lambda d: "L-hide-display" in d.find_element(By.ID, "L-gen4").get_attribute("class")
             )
-            print('로딩 완료, 메뉴 선택 가능')
-            print(f"\n[설정] Product: {product_category}, Supplier: {supplier_category}")
+            log_msg('로딩 완료, 메뉴 선택 가능', log_queue)
+            log_msg(f"\n[설정] Product: {product_category}, Supplier: {supplier_category}", log_queue)
 
             # LGEKR 업체 처리 (LGEKR 선택 시)
             if supplier_category == 'LGEKR':
                 target_companies_kr = COMPANIES['LGEKR'].get(product_category, [])
                 if target_companies_kr:
-                    print(f"\n>>> LGEKR 관할 {product_category.upper()} 업체 처리 시작 <<<")
-                    download_excel_for_companies(driver, target_companies_kr, skip_model_filter=(product_category == 'pc'))
+                    log_msg(f"\n>>> LGEKR 관할 {product_category.upper()} 업체 처리 시작 <<<", log_queue)
+                    download_excel_for_companies(driver, target_companies_kr, skip_model_filter=(product_category == 'pc'), log_queue=log_queue)
                 else:
-                    print(f"\n[알림] LGEKR에 {product_category} 업체가 없습니다.")
+                    log_msg(f"\n[알림] LGEKR에 {product_category} 업체가 없습니다.", log_queue)
 
             # LGECH 업체 처리 (LGECH 선택 시)
             elif supplier_category == 'LGECH':
                 # 먼저 LGECH로 법인 전환
                 try:
-                    print("\n>>> 법인 전환 시도 (LGEKR -> LGECH) <<<")
+                    log_msg("\n>>> 법인 전환 시도 (LGEKR -> LGECH) <<<", log_queue)
                     open_tab = WebDriverWait(driver, 10).until(
                         EC.element_to_be_clickable((By.XPATH, "//div[@id='quickMenu']//img"))
                     )
                     open_tab.click()
-                    print("'OPEN' 탭 클릭 완료")
+                    log_msg("'OPEN' 탭 클릭 완료", log_queue)
                     
                     # iframe 전환
                     iframes = driver.find_elements(By.TAG_NAME, "iframe")
@@ -467,21 +475,21 @@ def main():
                         driver.switch_to.frame(target_iframe)
                     else:
                         WebDriverWait(driver, 15).until(EC.frame_to_be_available_and_switch_to_it((By.TAG_NAME, "iframe")))
-                    print("iframe 전환 성공")
+                    log_msg("iframe 전환 성공", log_queue)
                     time.sleep(2)
 
                     # LGEKR 클릭 (그리드 숨기기)
                     try:
                         lgekr_span = WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.ID, "LGEKR")))
                         driver.execute_script("arguments[0].click();", lgekr_span.find_element(By.TAG_NAME, "a"))
-                        print("'LGEKR' 그리드 숨기기 완료")
+                        log_msg("'LGEKR' 그리드 숨기기 완료", log_queue)
                     except: pass
                     time.sleep(1)
 
                     # LGECH 클릭
                     lgech_span = WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.ID, "LGECH")))
                     driver.execute_script("arguments[0].click();", lgech_span.find_element(By.TAG_NAME, "a"))
-                    print("'LGECH' 선택 완료")
+                    log_msg("'LGECH' 선택 완료", log_queue)
                     time.sleep(3)
 
                     # GAO CHUANG (GMZ) 선택 (LGECH 첫 업체)
@@ -489,39 +497,39 @@ def main():
                         EC.presence_of_element_located((By.XPATH, "//span[contains(text(), 'GAO CHUANG (GMZ)')]"))
                     )
                     driver.execute_script("arguments[0].click();", supplier_element)
-                    print("'GAO CHUANG (GMZ)' 업체 선택 완료")
+                    log_msg("'GAO CHUANG (GMZ)' 업체 선택 완료", log_queue)
                     time.sleep(2)
 
                     driver.switch_to.default_content()
                     ActionChains(driver).send_keys(Keys.ESCAPE).perform()
-                    print("모달 닫기 완료")
+                    log_msg("모달 닫기 완료", log_queue)
                     
                     # 법인 전환 후 로딩 대기
                     WebDriverWait(driver, 20).until(
                         lambda d: "L-hide-display" in d.find_element(By.ID, "L-gen4").get_attribute("class")
                     )
-                    print("법인 전환 후 로딩 완료")
+                    log_msg("법인 전환 후 로딩 완료", log_queue)
 
                 except Exception as e_switch:
-                    print(f"법인 전환 실패: {e_switch}")
+                    log_msg(f"법인 전환 실패: {e_switch}", log_queue)
                     raise e_switch
 
                 # LGECH 업체 처리
                 target_companies_ch = COMPANIES['LGECH'].get(product_category, [])
                 if target_companies_ch:
-                    print(f"\n>>> LGECH 관할 {product_category.upper()} 업체 처리 시작 <<<")
-                    download_excel_for_companies(driver, target_companies_ch, skip_model_filter=(product_category == 'pc'))
+                    log_msg(f"\n>>> LGECH 관할 {product_category.upper()} 업체 처리 시작 <<<", log_queue)
+                    download_excel_for_companies(driver, target_companies_ch, skip_model_filter=(product_category == 'pc'), log_queue=log_queue)
                 else:
-                    print(f"\n[알림] LGECH에 {product_category} 업체가 없습니다.")
+                    log_msg(f"\n[알림] LGECH에 {product_category} 업체가 없습니다.", log_queue)
 
                 # 최종 원복 (LGECH -> LGEKR) 및 AU OPTRONICS (GMZ) 선택
                 try:
-                    print("\n>>> 최종 원복 시도 (LGECH -> LGEKR) <<<")
+                    log_msg("\n>>> 최종 원복 시도 (LGECH -> LGEKR) <<<", log_queue)
                     open_tab = WebDriverWait(driver, 10).until(
                         EC.element_to_be_clickable((By.XPATH, "//div[@id='quickMenu']//img"))
                     )
                     open_tab.click()
-                    print("'OPEN' 탭 클릭 완료")
+                    log_msg("'OPEN' 탭 클릭 완료", log_queue)
                     
                     # iframe 전환
                     iframes = driver.find_elements(By.TAG_NAME, "iframe")
@@ -537,13 +545,13 @@ def main():
                         driver.switch_to.frame(target_iframe)
                     else:
                         WebDriverWait(driver, 15).until(EC.frame_to_be_available_and_switch_to_it((By.TAG_NAME, "iframe")))
-                    print("iframe 전환 성공")
+                    log_msg("iframe 전환 성공", log_queue)
                     time.sleep(2)
 
                     # LGEKR 클릭
                     lgekr_span = WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.ID, "LGEKR")))
                     driver.execute_script("arguments[0].click();", lgekr_span.find_element(By.TAG_NAME, "a"))
-                    print("'LGEKR' 선택 완료")
+                    log_msg("'LGEKR' 선택 완료", log_queue)
                     time.sleep(3)
 
                     # AU OPTRONICS (GMZ) 선택
@@ -551,18 +559,18 @@ def main():
                         EC.presence_of_element_located((By.XPATH, "//span[contains(text(), 'AU OPTRONICS (GMZ)')]"))
                     )
                     driver.execute_script("arguments[0].click();", supplier_element)
-                    print("'AU OPTRONICS (GMZ)' 업체 선택 완료")
+                    log_msg("'AU OPTRONICS (GMZ)' 업체 선택 완료", log_queue)
                     time.sleep(2)
 
                     driver.switch_to.default_content()
                     ActionChains(driver).send_keys(Keys.ESCAPE).perform()
-                    print("모달 닫기 완료 및 최종 원복 성공")
+                    log_msg("모달 닫기 완료 및 최종 원복 성공", log_queue)
 
                 except Exception as e_revert:
-                    print(f"최종 원복 실패: {e_revert}")
+                    log_msg(f"최종 원복 실패: {e_revert}", log_queue)
 
         except Exception as e:
-            print('자동화 프로세스 중 오류:', e)
+            log_msg(f'자동화 프로세스 중 오류: {e}', log_queue)
 
     finally:
         driver.quit()

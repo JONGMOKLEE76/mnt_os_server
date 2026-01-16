@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ORCA - Outsourcing Resource & Control Application</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="bg-animation"></div>
+    
+    <div class="login-container">
+        <div class="glass-card login-card">
+            <!-- Logo -->
+            <div class="logo-container">
+                <svg class="logo-icon" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <!-- Orca Whale SVG -->
+                    <ellipse cx="50" cy="50" rx="40" ry="25" fill="#00D9FF"/>
+                    <ellipse cx="35" cy="45" rx="8" ry="12" fill="#0A1628"/>
+                    <circle cx="25" cy="50" r="3" fill="white"/>
+                    <path d="M75 35 Q90 25 85 50 Q90 75 75 65 Q80 50 75 35" fill="#00D9FF"/>
+                    <path d="M20 40 Q5 30 15 50" stroke="#00D9FF" stroke-width="4" fill="none"/>
+                    <ellipse cx="60" cy="55" rx="15" ry="8" fill="white" opacity="0.3"/>
+                </svg>
+                <h1 class="logo-text">ORCA</h1>
+                <p class="logo-subtitle">Outsourcing Resource & Control Application</p>
+            </div>
+
+            <!-- Tab Toggle -->
+            <div class="tab-toggle">
+                <button class="tab-btn active" data-tab="login">로그인</button>
+                <button class="tab-btn" data-tab="signup">회원가입</button>
+            </div>
+
+            <!-- Flash Messages -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <!-- Login Form -->
+            <div class="form-panel active" id="login-panel">
+                <form action="{{ url_for('login') }}" method="POST">
+                    <div class="form-group">
+                        <label class="form-label">사용자 ID</label>
+                        <input type="text" name="userid" class="form-input" placeholder="Enter your ID" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">비밀번호</label>
+                        <input type="password" name="password" class="form-input" placeholder="Enter your password" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">로그인</button>
+                </form>
+            </div>
+
+            <!-- Signup Form -->
+            <div class="form-panel" id="signup-panel">
+                <form action="{{ url_for('signup') }}" method="POST">
+                    <div class="form-group">
+                        <label class="form-label">사용자 ID</label>
+                        <input type="text" name="userid" class="form-input" placeholder="Choose a unique ID" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">비밀번호</label>
+                        <input type="password" name="password" class="form-input" placeholder="Create a password" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">이메일</label>
+                        <input type="email" name="email" class="form-input" placeholder="your@email.com" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">팀</label>
+                        <input type="text" name="team" class="form-input" placeholder="Your team name" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">회사</label>
+                        <input type="text" name="company" class="form-input" placeholder="Your company name" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">회원가입</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Tab Toggle
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.form-panel').forEach(p => p.classList.remove('active'));
+                
+                btn.classList.add('active');
+                document.getElementById(btn.dataset.tab + '-panel').classList.add('active');
+            });
+        });
+    </script>
+</body>
+</html>

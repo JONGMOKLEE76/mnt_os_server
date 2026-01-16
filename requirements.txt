@@ -9,6 +9,8 @@ lxml
 
 # Server dependencies
 Flask
+Flask-Login
+Werkzeug
 plotly
 SQLAlchemy
 requests

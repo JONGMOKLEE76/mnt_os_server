@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ORCA - Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div class="bg-animation"></div>
+
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="navbar-brand">
+            <svg class="navbar-logo" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <ellipse cx="50" cy="50" rx="40" ry="25" fill="#00D9FF" />
+                <ellipse cx="35" cy="45" rx="8" ry="12" fill="#0A1628" />
+                <circle cx="25" cy="50" r="3" fill="white" />
+                <path d="M75 35 Q90 25 85 50 Q90 75 75 65 Q80 50 75 35" fill="#00D9FF" />
+            </svg>
+            <span class="navbar-title">ORCA</span>
+        </div>
+        <div class="navbar-menu">
+            <a href="{{ url_for('dashboard') }}" class="nav-link active">GLOP Driver</a>
+            {% if current_user.is_admin %}
+            <a href="{{ url_for('admin') }}" class="nav-link">관리자</a>
+            {% endif %}
+            <div class="user-info">
+                <span>{{ current_user.userid }}</span>
+                <a href="{{ url_for('logout') }}" class="nav-link">로그아웃</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Dashboard Content -->
+    <div class="dashboard-container">
+        <div class="glass-card driver-panel">
+            <h2 style="margin-bottom: 25px; color: var(--accent-teal);">🐋 GLOP Driver</h2>
+
+            <!-- Driver Controls -->
+            <div class="driver-controls">
+                <div class="control-group">
+                    <label>Product Category</label>
+                    <select id="product-category">
+                        <option value="monitor">Monitor</option>
+                        <option value="pc">PC</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label>Supplier Category</label>
+                    <select id="supplier-category">
+                        <option value="LGEKR">LGEKR</option>
+                        <option value="LGECH">LGECH</option>
+                    </select>
+                </div>
+                <div class="control-group" style="display: flex; align-items: flex-end;">
+                    <button id="drive-btn" class="btn btn-primary" style="width: 100%;">
+                        🚀 Drive GLOP
+                    </button>
+                </div>
+            </div>
+
+            <!-- Status Indicator -->
+            <div id="status-indicator" style="margin-bottom: 15px;">
+                <span class="status-badge status-pending" id="driver-status">대기 중</span>
+            </div>
+
+            <!-- Log Console -->
+            <div class="log-console" id="log-console">
+                <div class="log-entry info">ORCA GLOP Driver 준비 완료</div>
+                <div class="log-entry info">Product 및 Supplier Category를 선택하고 Drive GLOP 버튼을 클릭하세요.</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+
+</html>
