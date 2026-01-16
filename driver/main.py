@@ -64,7 +64,7 @@ def wait_for_new_file(download_dir, initial_files, timeout=60):
         time.sleep(1)
     return None
 
-def save_to_db(file_path, site_name):
+def save_to_db(file_path, site_name, data_source):
     """
     다운로드된 엑셀 파일을 읽어 DB(SQLite)에 저장하는 함수.
     엑셀에 포함된 PO 번호들에 대해서만 기존 데이터를 삭제하고 새로 입력하여
@@ -101,6 +101,18 @@ def save_to_db(file_path, site_name):
             
             # 'From Site' 컬럼 추가
             df['From Site'] = site_name
+            
+            # 'Data Source' 컬럼 추가 (NERP/GERP)
+            df['Data Source'] = data_source
+
+            # --- [추가] 특수 Ship To 매핑 (TCL MOKA / Monitor, GERP) ---
+            if site_name == 'TCL MOKA / Monitor' and data_source == 'GERP' and 'Ship To' in df.columns:
+                original_value = 'ООО "РК Дистрибьюшен"'
+                replacement_value = 'ERRA_MINSK_DO'
+                mask = df['Ship To'] == original_value
+                if mask.any():
+                    df.loc[mask, 'Ship To'] = replacement_value
+                    print(f"[알림] Ship To '{original_value}' → '{replacement_value}' 로 {mask.sum()}건 변환 완료")
 
             # --- [추가] 모델 필터링 로직 ---
             try:
@@ -117,7 +129,7 @@ def save_to_db(file_path, site_name):
 
                     # 제외될 모델 식별
                     excluded_mask = ~temp_series.isin(valid_series)
-                    excluded_models = df.loc[excluded_mask, 'Model'].unique()
+                    excluded_models = df.loc[excluded_mask, 'Model'].apply(lambda x: x.split('-')[0].split('.')[0]).unique()
 
                     if len(excluded_models) > 0:
                         print(f"\n[알림] 다음 {len(excluded_models)}개 모델은 os_models에 없어 제외되었습니다:")
@@ -169,9 +181,10 @@ def save_to_db(file_path, site_name):
                     missing_tos = excel_ship_tos - mapped_tos
                     
                     if missing_tos:
-                        print(f"\n[오류] 다음 Ship To에 대한 Region/Country 정보가 site_mapping 테이블에 없습니다: {missing_tos}")
-                        print("site_mapping 테이블에 정보를 추가한 후 다시 시도해주세요. 업데이트를 중단합니다.")
-                        return
+                        print(f"\n[알림] 다음 Ship To에 대한 Region/Country 정보가 site_mapping 테이블에 없습니다 (NULL로 저장됨):")
+                        for ship_to in missing_tos:
+                            print(f"- {ship_to}")
+                        # return 제거: 매핑 정보가 없어도 진행 (Left Join으로 인해 NULL로 들어감)
                     
                     # Join 수행
                     df = df.merge(mapping_df[['to_site', 'region', 'country']], 
@@ -265,70 +278,102 @@ def download_excel_for_companies(driver, target_companies):
             print(f'업체 선택 중 오류 ({company_name}):', e)
             continue # 다음 업체로 진행
 
-        # Shipping & Invoicing 상단 메뉴에 마우스 오버 및 하위 메뉴 클릭
-        try:
-            menu_li = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.ID, "mNavi_2"))
-            )
-            ActionChains(driver).move_to_element(menu_li).perform()
-            print('상단 Shipping & Invoicing 메뉴에 마우스 오버 완료')
-            time.sleep(1)
-            submenu = WebDriverWait(driver, 10).until(
-                EC.element_to_be_clickable((By.XPATH, "//a[contains(text(), 'Shipping & Invoicing (NERP)')]"))
-            )
-            submenu.click()
-            print('하위 Shipping & Invoicing 메뉴 클릭 완료')
-            
-            # 하위 메뉴 클릭 후 spin 요소가 사라질 때까지 대기
+        # 메뉴 목록 정의 (NERP 및 GERP)
+        menus = [
+            {'text': 'Shipping & Invoicing (NERP)', 'source': 'NERP', 'type': 'text'},
+            {'text': 'Shipping & Invoicing', 'source': 'GERP', 'type': 'href', 'keyword': 'SR00301'}
+        ]
+
+        for menu in menus:
+            menu_text = menu['text']
+            source_name = menu['source']
+            print(f"  >> 메뉴 처리 시작: {menu_text} (Source: {source_name})")
+
+            # Shipping & Invoicing 상단 메뉴에 마우스 오버 및 하위 메뉴 클릭
             try:
-                # 페이지 상태에 따라 L-gen ID가 다를 수 있으므로 유연하게 대기 (L-gen7 또는 L-gen4 등)
-                WebDriverWait(driver, 20).until(
-                    lambda d: any("L-hide-display" in d.find_element(By.ID, f"L-gen{i}").get_attribute("class") for i in [4, 7])
+                menu_li = WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.ID, "mNavi_2"))
                 )
-                print('하위 메뉴 이동 후 로딩 완료')
+                ActionChains(driver).move_to_element(menu_li).perform()
+                print('상단 Shipping & Invoicing 메뉴에 마우스 오버 완료')
+                time.sleep(1)
                 
-                # spin 사라진 후 엑셀 다운로드 버튼 클릭
+                # 메뉴 찾기 (Text 또는 Href)
+                if menu['type'] == 'href':
+                    # GERP: href 속성에 'SR00301'이 포함된 요소 찾기
+                    xpath = f"//a[contains(@href, '{menu['keyword']}')]"
+                else:
+                    # NERP: 텍스트 정확히 일치하는 메뉴 찾기
+                    xpath = f"//a[normalize-space(text())='{menu_text}']"
+
+                submenu = WebDriverWait(driver, 10).until(
+                    EC.element_to_be_clickable((By.XPATH, xpath))
+                )
+                submenu.click()
+                print(f'하위 {menu_text} 메뉴 클릭 완료')
+                
+                # 하위 메뉴 클릭 후 spin 요소가 사라질 때까지 대기
                 try:
-                    excel_btn = WebDriverWait(driver, 10).until(
-                        EC.element_to_be_clickable((By.ID, "informationExcelDownloadIod"))
+                    # L-gen7 (로딩 패널)이 숨겨질 때까지 대기 (class에 L-hide-display 포함 여부 확인)
+                    WebDriverWait(driver, 30).until(
+                        lambda d: "L-hide-display" in d.find_element(By.ID, "L-gen7").get_attribute("class")
                     )
+                    print('하위 메뉴 이동 후 로딩 완료 (L-gen7 확인)')
                     
-                    # 팝업(alert/confirm)을 무시하고 자동으로 수락하도록 JS 주입
-                    driver.execute_script("window.confirm = function(msg){ return true; };")
-                    driver.execute_script("window.alert = function(msg){ return true; };")
-                    print("JS Alert/Confirm Override 적용 완료")
-
-                    # 다운로드 클릭 전 파일 목록 캡처
-                    initial_files = set(os.listdir(DOWNLOAD_DIR))
-
-                    excel_btn.click()
-                    print('엑셀 다운로드 버튼 클릭 완료')
-
-                    # Native Alert 시도 (안전장치)
+                    # spin 사라진 후 엑셀 다운로드 버튼 클릭
                     try:
-                        WebDriverWait(driver, 3).until(EC.alert_is_present())
-                        alert = driver.switch_to.alert
-                        alert.accept()
-                        print('Native Alert 수락 완료')
-                    except:
-                        pass
-                    
-                    # 파일 다운로드 대기 및 업데이트
-                    print(f"파일 다운로드 대기 중 (Max 60s)...")
-                    new_file = wait_for_new_file(DOWNLOAD_DIR, initial_files)
-                    if new_file:
-                        print(f"새 파일 감지됨: {new_file}")
-                        save_to_db(new_file, company_name)
-                    else:
-                        print("다운로드된 새 파일을 찾지 못했습니다.")
+                        excel_btn = WebDriverWait(driver, 10).until(
+                            EC.element_to_be_clickable((By.ID, "informationExcelDownloadIod"))
+                        )
                         
-                except Exception as e:
-                    print('엑셀 다운로드 버튼 클릭 중 오류:', e)
+                        # 팝업(alert/confirm)을 무시하고 자동으로 수락하도록 JS 주입
+                        driver.execute_script("window.confirm = function(msg){ return true; };")
+                        driver.execute_script("window.alert = function(msg){ return true; };")
+                        # print("JS Alert/Confirm Override 적용 완료")
 
+                        # 다운로드 클릭 전 파일 목록 캡처
+                        initial_files = set(os.listdir(DOWNLOAD_DIR))
+
+                        # [수정] L-gen7 (로딩 패널)이 숨겨질 때까지 대기 (class에 L-hide-display 포함 여부 확인)
+                        try:
+                            WebDriverWait(driver, 20).until(
+                                lambda d: "L-hide-display" in d.find_element(By.ID, "L-gen7").get_attribute("class")
+                            )
+                            print('로딩 마스크(L-gen7) 해제 확인 완료')
+                        except Exception as e:
+                            print(f'로딩 대기 중 타임아웃 또는 오류: {e}')
+                            pass
+
+                        excel_btn.click()
+                        print('엑셀 다운로드 버튼 클릭 완료')
+
+                        # Native Alert 시도 (안전장치)
+                        try:
+                            WebDriverWait(driver, 3).until(EC.alert_is_present())
+                            alert = driver.switch_to.alert
+                            alert.accept()
+                            print('Native Alert 수락 완료')
+                        except:
+                            pass
+                        
+                        # 파일 다운로드 대기 및 업데이트
+                        print(f"파일 다운로드 대기 중 (Max 60s)...")
+                        new_file = wait_for_new_file(DOWNLOAD_DIR, initial_files)
+                        if new_file:
+                            print(f"새 파일 감지됨: {new_file}")
+                            save_to_db(new_file, company_name, source_name)
+                        else:
+                            print("다운로드된 새 파일을 찾지 못했습니다.")
+                            
+                    except Exception as e:
+                        print('엑셀 다운로드 버튼 클릭 중 오류:', e)
+
+                except Exception as e:
+                    print('하위 메뉴 이동 후 로딩 대기 중 오류:', e)
             except Exception as e:
-                print('하위 메뉴 이동 후 로딩 대기 중 오류:', e)
-        except Exception as e:
-            print('Shipping & Invoicing 메뉴 자동화 중 오류:', e)
+                print(f'메뉴 자동화 중 오류 ({menu_text}):', e)
+            
+            time.sleep(1) # 메뉴 간 잠시 대기
         
         print(f"--- [{company_name}] 처리 완료 ---\n")
         time.sleep(2)
